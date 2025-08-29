@@ -1,4 +1,105 @@
 ---
+dtmf_app/
+│── dtmf_app.py
+│── requirements.txt
+
+
+---
+
+🐍 dtmf_app.py
+
+import numpy as np
+import sounddevice as sd
+import tkinter as tk
+from scipy.fft import fft
+
+# Sampling info
+fs = 8000
+duration = 0.5
+
+# DTMF frequency map
+dtmf_freqs = {
+    '1': (697, 1209),
+    '2': (697, 1336),
+    '3': (697, 1477),
+    '4': (770, 1209),
+    '5': (770, 1336),
+    '6': (770, 1477),
+    '7': (852, 1209),
+    '8': (852, 1336),
+    '9': (852, 1477),
+    '*': (941, 1209),
+    '0': (941, 1336),
+    '#': (941, 1477)
+}
+
+# Function to generate & play tone
+def play_tone(key):
+    f1, f2 = dtmf_freqs[key]
+    t = np.linspace(0, duration, int(fs * duration), endpoint=False)
+    tone = np.sin(2*np.pi*f1*t) + np.sin(2*np.pi*f2*t)
+    sd.play(tone, fs)
+    sd.wait()
+
+# Function to detect DTMF from microphone input
+def detect_tone():
+    duration_rec = 0.5
+    recording = sd.rec(int(duration_rec * fs), samplerate=fs, channels=1, dtype='float64')
+    sd.wait()
+
+    # FFT analysis
+    signal = recording[:,0]
+    fft_data = np.abs(fft(signal))
+    freqs = np.fft.fftfreq(len(fft_data), 1/fs)
+
+    positive_freqs = freqs[:len(freqs)//2]
+    positive_fft = fft_data[:len(freqs)//2]
+
+    # Find two main peaks
+    peak_indices = positive_fft.argsort()[-5:]
+    detected = sorted([round(positive_freqs[i]) for i in peak_indices])
+
+    # Match with DTMF table
+    detected_key = None
+    for key, (f1,f2) in dtmf_freqs.items():
+        if any(abs(d-f1)<20 for d in detected) and any(abs(d-f2)<20 for d in detected):
+            detected_key = key
+            break
+
+    if detected_key:
+        result_label.config(text=f"Detected: {detected_key}")
+    else:
+        result_label.config(text="No valid tone detected")
+
+# GUI
+root = tk.Tk()
+root.title("DTMF Generator + Decoder")
+
+# Generator buttons
+buttons = [
+    ['1','2','3'],
+    ['4','5','6'],
+    ['7','8','9'],
+    ['*','0','#']
+]
+
+for r,row in enumerate(buttons):
+    for c,key in enumerate(row):
+        btn = tk.Button(root, text=key, font=("Arial", 20), width=5, height=2,
+                        command=lambda k=key: play_tone(k))
+        btn.grid(row=r, column=c, padx=5, pady=5)
+
+# Decoder button
+detect_btn = tk.Button(root, text="🎤 Detect Tone", font=("Arial", 16),
+                       command=detect_tone, bg="lightblue")
+detect_btn.grid(row=5, column=0, columnspan=3, pady=10)
+
+# Result label
+result_label = tk.Label(root, text="Detected: None", font=("Arial", 16))
+result_label.grid(row=6, column=0, columnspan=3, pady=5)
+
+root.mainloop()
+
 page_type: sample
 languages:
 - azdeveloper
